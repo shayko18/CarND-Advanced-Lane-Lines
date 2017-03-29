@@ -71,11 +71,12 @@ def get_object_grid(nx, ny):
 ###		nx: nominal number of corners in the x-axis. we will also check up to -dn around it
 ###		ny: nominal number of corners in the y-axis. we will also check up to -dn around it
 ###		dn: the maximal delta we will ad to each axis 
-###     plot_example: after we finish with the calibration we choose a random calibration image and we plot the original image and the image after we calibrated it.
+###     plot_en: after we finish with the calibration we choose a random calibration image and we plot the original image and the image after we calibrated it.
 ###
 ###   Output: 
 ###      image: the final image. In a RGB format.
-def find_calibration_params(nx, ny, dn, plot_example=False):
+def find_calibration_params(nx, ny, dn, plot_en=False):
+	print('---> Start Calibration')
 	# Read all the calibration images
 	imgs_fnames = glob.glob('camera_cal/calibration*.jpg')
 	
@@ -96,11 +97,11 @@ def find_calibration_params(nx, ny, dn, plot_example=False):
 				img_points.append(corners)                 # corners we found in this image
 				break
 
-	print('Calibrate on {} images out of {} images'.format(len(img_points), len(imgs_fnames)))
+	print('\tCalibrate on {} images out of {} images'.format(len(img_points), len(imgs_fnames)))
 	ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(obj_points, img_points, gray.shape[::-1], None, None)
 	
 	# Choose a random calibration image and we plot the original image and the image after we calibrated it 
-	if plot_example:
+	if plot_en:
 		idx = np.random.randint(low=0, high=len(imgs_fnames))      # choose a random calibration image 
 		img = cv2.imread(imgs_fnames[idx])                         # read the image
 		img = cv2.cvtColor(img,cv2.COLOR_BGR2RGB)                  # Switch to RGB format
@@ -108,7 +109,6 @@ def find_calibration_params(nx, ny, dn, plot_example=False):
 
 		plot_dist_vs_undist(img, dst, corners=img_points[idx], title=imgs_fnames[idx])
 	
-	print('Finished Calibration')
 	return ret, mtx, dist, rvecs, tvecs
 
 
@@ -133,20 +133,193 @@ def calibrate_road_image(mtx, dist, idx=None):
 	return dst
 	
 
+### sobel_binary_th: apply sobel on the gray image on x-axis and y-axis. 
+###                     Then we use 4 different thresholds on |sobel_x|,|sobel_y|,|sobel|,abg(sobel) to get a binary picture with the lane lines
+###                     out = (|sobel_x|&|sobel_y|) | (|sobel|&abg(sobel))
+###   Input: 
+###		rgb_img: rgb image
+###		kernel_size: kernel size of the sobel. default is 3
+###		plot_en: plot the grey sacle image, the final result in binary image and a colored image of each of the components (sobel_x, |sobel|, ang_sobel) 
+###
+###   Output: 
+###      b_sobel_total: binary image after all the thresholds were applied.	
+def sobel_binary_th(rgb_img, kernel_size=3, plot_en=False):
+	print('\t---> Start Sobel Binary Threshold')
+	# 1) convert to gray scale
+	g_img = cv2.cvtColor(rgb_img, cv2.COLOR_RGB2GRAY)               # convert to gray scale
 	
+	# 2) Now we calculate all the sobels and sobel functions we need
+	sobel_x = cv2.Sobel(g_img, cv2.CV_64F, 1, 0, ksize=kernel_size) # sobel on x-axis
+	sobel_y = cv2.Sobel(g_img, cv2.CV_64F, 0, 1, ksize=kernel_size) # sobel on y-axis
+	abs_sobel_x = np.absolute(sobel_x)                             # |sobel_x|
+	abs_sobel_x = np.uint8(255*abs_sobel_x/np.max(abs_sobel_x))    # scale |sobel_x|
+	abs_sobel_y = np.absolute(sobel_y)                             # |sobel_y|
+	abs_sobel_y = np.uint8(255*abs_sobel_y/np.max(abs_sobel_y))    # scale |sobel_y|
+	mag_sobel = np.sqrt(sobel_x**2 + sobel_y**2)                   # |sobel| = sqrt(sobel_x^2 + sobel_y^2) 
+	mag_sobel = np.uint8(255*mag_sobel/np.max(mag_sobel))          # scale |sobel|
+	# for the angle we use a larger kernel_size to reduce noise
+	sobel_x_lpf = cv2.Sobel(g_img, cv2.CV_64F, 1, 0, ksize=(5*kernel_size))      # sobel on x-axis with bigger kernel
+	sobel_y_lpf = cv2.Sobel(g_img, cv2.CV_64F, 0, 1, ksize=(5*kernel_size))      # sobel on y-axis with bigger kernel
+	ang_sobel = np.arctan2(np.absolute(sobel_y_lpf), np.absolute(sobel_x_lpf))   # abg(sobel) [-pi,pi)
+	
+	# we put in a list all the sobels we will use
+	all_sobel_name=['abs_sobel_x','abs_sobel_y','mag_sobel','ang_sobel']
+	all_sobel=[abs_sobel_x,abs_sobel_y,mag_sobel,ang_sobel] 
+	
+	# 3) creating binary images - each will threshold a different sobel information 
+	#    We start by setting the thresholds
+	all_th_en=['th', 'all_ones', 'all_zeros', 'all_zeros'] # threshold enablers: "all zeros", "all ones" or to use the threshols  
+	all_th = np.array([[20,100], [80,100], [70,100], [0.7, 1.3]]) # the threshold for each sobel function
+	
+	b_all_sobel = [] # a list of the binary sobels after we use the threshold
+	for i in range(len(all_sobel)):
+		if ('all_ones' == all_th_en[i]):                            # all ones
+			b_all_sobel.append(np.ones_like(all_sobel[i])) 
+			print('\t\t{}: all Ones'.format(all_sobel_name[i]))
+		elif ('all_zeros' == all_th_en[i]):                         # all zeros
+			b_all_sobel.append(np.zeros_like(all_sobel[i])) 
+			print('\t\t{}: all Zeros'.format(all_sobel_name[i]))
+		else:                                                       # normal threshold
+			b_sobel = np.zeros_like(all_sobel[i]) 
+			b_sobel[(all_sobel[i] >= all_th[i,0]) & (all_sobel[i] <= all_th[i,1])] = 1    # apply threshold
+			b_all_sobel.append(b_sobel) 
+	
+	
+	# 4) combine all the binary images
+	b_sobel_ax = np.zeros_like(b_all_sobel[0])
+	b_sobel_ax[(b_all_sobel[0] == 1) & (b_all_sobel[1] == 1)] = 1
+	b_sobel_mag_ang = np.zeros_like(b_all_sobel[2])
+	b_sobel_mag_ang[(b_all_sobel[2] == 1) & (b_all_sobel[3] == 1)] = 1
+	b_sobel_total = np.zeros_like(b_sobel_ax)
+	b_sobel_total[(b_sobel_ax == 1) | (b_sobel_mag_ang == 1)] = 1
+	
+	if plot_en: # plot the binary image and the colored binary components
+		color_binary = np.dstack((b_sobel_ax, np.zeros_like(b_sobel_ax), b_sobel_mag_ang)) 
+		plt.figure(figsize=(16,8))
+		plt.subplot(1,3,1)
+		plt.imshow(g_img, cmap='gray')
+		plt.title('Gray image')
+		plt.subplot(1,3,2)
+		plt.imshow(255*color_binary)
+		plt.title('Sobel breakdown (r=sobel_ax, b=mag_ang(sobel))')
+		plt.subplot(1,3,3)
+		plt.imshow(b_sobel_total, cmap='gray')
+		plt.title('Binary after sobel th')
+
+
+		plt.savefig('output_images/applay_sobel_th.png')
+	
+	return b_sobel_total
+
+	
+### color_binary_th: apply color threshold on the different channels in the RGB, HLS color space 
+###                    out = (r_channel | s_channel)
+###   Input: 
+###		rgb_img: rgb image
+###		plot_en: plot the undistorted image, the final result in binary image and the colored binary of those two threshold. 
+###
+###   Output: 
+###      b_color_total: binary image after all the thresholds were applied.	
+def color_binary_th(rgb_img, plot_en=False):
+	print('\t---> Start Color Binary Threshold')
+	# 1) take the relevant channels: red, Saturation
+	r_img = rgb_img[:,:,0]                                       # Red channel 
+	s_img = cv2.cvtColor(rgb_img, cv2.COLOR_RGB2HLS)[:,:,2]      # Saturation channel 
+	# we put in a list all the channels we will use
+	all_clr_name=['red','sat']
+	all_clr=[r_img,s_img] 
+	
+	# 2) creating binary images - each will threshold a different channel 
+	#    We start by setting the thresholds
+	all_th_en=['all_zeros', 'th'] # threshold enablers: "all zeros", "all ones" or to use the threshols  
+	all_th = np.array([[170,255], [170,255]]) # the threshold for each channel
+	
+	b_all_clr = [] # a list of the binary channels after we use the threshold
+	for i in range(len(all_clr)):
+		if ('all_ones' == all_th_en[i]):                            # all ones
+			b_all_clr.append(np.ones_like(all_clr[i])) 
+			print('\t\t{}: all Ones'.format(all_clr_name[i]))
+		elif ('all_zeros' == all_th_en[i]):                         # all zeros
+			b_all_clr.append(np.zeros_like(all_clr[i])) 
+			print('\t\t{}: all Zeros'.format(all_clr_name[i]))
+		else:                                                       # normal threshold
+			b_clr = np.zeros_like(all_clr[i]) 
+			b_clr[(all_clr[i] >= all_th[i,0]) & (all_clr[i] <= all_th[i,1])] = 1    # apply threshold
+			b_all_clr.append(b_clr) 
+	
+
+	# 4) combine all the binary images
+	b_clr_total = np.zeros_like(b_all_clr[0])
+	b_clr_total[(b_all_clr[0] == 1) | (b_all_clr[1] == 1)] = 1
+	
+	if plot_en: # plot the binary image and the colored binary components
+		color_binary = np.dstack((b_all_clr[0], np.zeros_like(b_all_clr[0]), b_all_clr[1])) 
+		plt.figure(figsize=(16,8))
+		plt.subplot(1,3,1)
+		plt.imshow(rgb_img)
+		plt.title('Original image')
+		plt.subplot(1,3,2)
+		plt.imshow(255*color_binary)
+		plt.title('Channel breakdown (r=red, b=sat)')
+		plt.subplot(1,3,3)
+		plt.imshow(b_clr_total, cmap='gray')
+		plt.title('Binary after color th')
+
+		plt.savefig('output_images/applay_color_th.png') 
+	
+	return b_clr_total
+
+
+### apply_binary_th: apply the following thresholds:
+###                    - sobel (all kind of functions)
+###                    - color channel threshold in different color space 
+###                        out = (sobel | color)
+###   Input: 
+###		rgb_img: rgb image
+###		plot_en: plot the undistorted image, the final result in binary image and the colored binary of those two threshold. 
+###
+###   Output: 
+###      b_total: binary image after all the thresholds were applied	
+def apply_binary_th(rgb_img, plot_en=False):
+	print('---> Start Binary Threshold')
+	b_sobel_undist_img = sobel_binary_th(rgb_img, kernel_size=3, plot_en=True) # b_ stands for binary  
+	b_color_undist_img = color_binary_th(rgb_img, plot_en=True) # b_ stands for binary
+	
+	# combine all the binary images
+	b_total = np.zeros_like(b_sobel_undist_img)
+	b_total[(b_sobel_undist_img == 1) | (b_color_undist_img == 1)] = 1
+	
+	if plot_en: # plot the binary image and the colored binary components
+		color_binary = np.dstack((b_sobel_undist_img, np.zeros_like(b_total),b_color_undist_img)) 
+		plt.figure(figsize=(16,8))
+		plt.subplot(1,3,1)
+		plt.imshow(rgb_img)
+		plt.title('Original image')
+		plt.subplot(1,3,2)
+		plt.imshow(255*color_binary)
+		plt.title('Channel breakdown (r=sobel, b=color)')
+		plt.subplot(1,3,3)
+		plt.imshow(b_total, cmap='gray')
+		plt.title('Binary after sobel&color th')
+
+		plt.savefig('output_images/binary_final.png') 
+	
+	return b_total
+
+
 	
 ####  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Part B: Main Pipeline ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~  ####
 ###
 ### We will find the calibration parameters, and test it one the test image
-ret, mtx, dist, rvecs, tvecs = find_calibration_params(nx=9, ny=6, dn=3, plot_example=True)	# find Calibration parameters
+ret, mtx, dist, rvecs, tvecs = find_calibration_params(nx=9, ny=6, dn=3, plot_en=True)	# find Calibration parameters
 rgb_undist_img = calibrate_road_image(mtx, dist, idx=0) # apply the Calibration parameters on one of the test images
 
 ###
 ### Next we will try to identify the lane lines on the undistorted image using:
 ###       - sobel (gradient vector)
 ###       - thresholding in different color spaces 
-### We will binary slice the different outputs and finally combine the two (and overlapping regions)
+### We will binary slice the different outputs and finally combine the two (OR operator on the overlapping regions)
 ### We will plot an example on what we got on a random road test image (the same image we got before)
-b_sobel_undist_img = sobel_binary_th(rgb_undist_img) # b_ = binary  
+b_undist_img = apply_binary_th(rgb_undist_img, plot_en=True) # b_ stands for binary  
 
 
