@@ -97,7 +97,7 @@ def find_calibration_params(nx, ny, dn, plot_en=False):
 				img_points.append(corners)                 # corners we found in this image
 				break
 
-	print('\tCalibrate on {} images out of {} images'.format(len(img_points), len(imgs_fnames)))
+	print('\t-->Calibrate on {} images out of {} images'.format(len(img_points), len(imgs_fnames)))
 	ret, mtx, dist, rvecs, tvecs = cv2.calibrateCamera(obj_points, img_points, gray.shape[::-1], None, None)
 	
 	# Choose a random calibration image and we plot the original image and the image after we calibrated it 
@@ -116,20 +116,23 @@ def find_calibration_params(nx, ny, dn, plot_en=False):
 ###   Input: 
 ###		mtx: the camera matrix
 ###		dist: distortion coefficients
-###		idx: the index of the image we want from the test images (0-5). None - for randon index.
+###		idx: the index of the image we want from the test images (0-5) or straight_lines images (0-1). None - for randon index.
+###		fname: the string at the start of the files name
+###		plot_en: if we want to plot the original image and the calibrated image
 ###
 ###   Output: 
 ###      dst: the undistorted image.	
 ###      save the image before and after calibration.	
-def calibrate_road_image(mtx, dist, idx=None):
-	imgs_fnames = glob.glob('test_images/test*.jpg')
+def calibrate_road_image(mtx, dist, idx=None, fname='test', plot_en=False):
+	imgs_fnames = glob.glob('test_images/'+fname+'*.jpg')
 	if idx is None:
 		idx = np.random.randint(low=0, high=len(imgs_fnames))  # choose a random road image
 	idx = max(0,min(idx,len(imgs_fnames)))                     # making sure we are in the range
 	img = cv2.imread(imgs_fnames[idx])                         # read the image
 	img = cv2.cvtColor(img,cv2.COLOR_BGR2RGB)                  # Switch to RGB format
 	dst = cv2.undistort(img, mtx, dist, None, mtx)             # undistorted image
-	plot_dist_vs_undist(img, dst, corners=None, title=imgs_fnames[idx])
+	if plot_en:
+		plot_dist_vs_undist(img, dst, corners=None, title=imgs_fnames[idx])
 	return dst
 	
 
@@ -144,13 +147,13 @@ def calibrate_road_image(mtx, dist, idx=None):
 ###   Output: 
 ###      b_sobel_total: binary image after all the thresholds were applied.	
 def sobel_binary_th(rgb_img, kernel_size=3, plot_en=False):
-	print('\t---> Start Sobel Binary Threshold')
+	print('\t--> Start Sobel Binary Threshold')
 	# 1) convert to gray scale
-	g_img = cv2.cvtColor(rgb_img, cv2.COLOR_RGB2GRAY)               # convert to gray scale
+	gray_img = cv2.cvtColor(rgb_img, cv2.COLOR_RGB2GRAY)               # convert to gray scale
 	
 	# 2) Now we calculate all the sobels and sobel functions we need
-	sobel_x = cv2.Sobel(g_img, cv2.CV_64F, 1, 0, ksize=kernel_size) # sobel on x-axis
-	sobel_y = cv2.Sobel(g_img, cv2.CV_64F, 0, 1, ksize=kernel_size) # sobel on y-axis
+	sobel_x = cv2.Sobel(gray_img, cv2.CV_64F, 1, 0, ksize=kernel_size) # sobel on x-axis
+	sobel_y = cv2.Sobel(gray_img, cv2.CV_64F, 0, 1, ksize=kernel_size) # sobel on y-axis
 	abs_sobel_x = np.absolute(sobel_x)                             # |sobel_x|
 	abs_sobel_x = np.uint8(255*abs_sobel_x/np.max(abs_sobel_x))    # scale |sobel_x|
 	abs_sobel_y = np.absolute(sobel_y)                             # |sobel_y|
@@ -158,9 +161,9 @@ def sobel_binary_th(rgb_img, kernel_size=3, plot_en=False):
 	mag_sobel = np.sqrt(sobel_x**2 + sobel_y**2)                   # |sobel| = sqrt(sobel_x^2 + sobel_y^2) 
 	mag_sobel = np.uint8(255*mag_sobel/np.max(mag_sobel))          # scale |sobel|
 	# for the angle we use a larger kernel_size to reduce noise
-	sobel_x_lpf = cv2.Sobel(g_img, cv2.CV_64F, 1, 0, ksize=(5*kernel_size))      # sobel on x-axis with bigger kernel
-	sobel_y_lpf = cv2.Sobel(g_img, cv2.CV_64F, 0, 1, ksize=(5*kernel_size))      # sobel on y-axis with bigger kernel
-	ang_sobel = np.arctan2(np.absolute(sobel_y_lpf), np.absolute(sobel_x_lpf))   # abg(sobel) [-pi,pi)
+	sobel_x_lpf = cv2.Sobel(gray_img, cv2.CV_64F, 1, 0, ksize=(5*kernel_size))      # sobel on x-axis with bigger kernel
+	sobel_y_lpf = cv2.Sobel(gray_img, cv2.CV_64F, 0, 1, ksize=(5*kernel_size))      # sobel on y-axis with bigger kernel
+	ang_sobel = np.arctan2(np.absolute(sobel_y_lpf), np.absolute(sobel_x_lpf))      # abg(sobel) [-pi,pi)
 	
 	# we put in a list all the sobels we will use
 	all_sobel_name=['abs_sobel_x','abs_sobel_y','mag_sobel','ang_sobel']
@@ -197,7 +200,7 @@ def sobel_binary_th(rgb_img, kernel_size=3, plot_en=False):
 		color_binary = np.dstack((b_sobel_ax, np.zeros_like(b_sobel_ax), b_sobel_mag_ang)) 
 		plt.figure(figsize=(16,8))
 		plt.subplot(1,3,1)
-		plt.imshow(g_img, cmap='gray')
+		plt.imshow(gray_img, cmap='gray')
 		plt.title('Gray image')
 		plt.subplot(1,3,2)
 		plt.imshow(255*color_binary)
@@ -221,7 +224,7 @@ def sobel_binary_th(rgb_img, kernel_size=3, plot_en=False):
 ###   Output: 
 ###      b_color_total: binary image after all the thresholds were applied.	
 def color_binary_th(rgb_img, plot_en=False):
-	print('\t---> Start Color Binary Threshold')
+	print('\t--> Start Color Binary Threshold')
 	# 1) take the relevant channels: red, Saturation
 	r_img = rgb_img[:,:,0]                                       # Red channel 
 	s_img = cv2.cvtColor(rgb_img, cv2.COLOR_RGB2HLS)[:,:,2]      # Saturation channel 
@@ -306,13 +309,87 @@ def apply_binary_th(rgb_img, plot_en=False):
 	
 	return b_total
 
+	
+### find_birdeye_matrix: Calc the bird-eye Tarnsform Matrix (and the inverse) 
+###                      We will look on both images we have "straight_lines" and average the output
+###   Input: 
+###		M_op: wich matrix we want to return: 0-average on both straight_lines images. 1:straight_lines1, 2: straight_lines2
+###		plot_en: plot the original image and the bird-eye image (for both pictures we have)
+###			mtx: calibration matrix. if we want to plot the straight_lines images we will need the calibration matrix
+###			dist: distortion coefficients. if we want to plot the straight_lines images we will need the distortion coefficients
+###
+###   Output: 
+###      M: The tarnsform Matrix (normal to bird-eye)	
+###      M_inv: The inverse tarnsform Matrix (bird-eye to normal)	
+def find_birdeye_matrix(M_op=0, plot_en=False, mtx=None, dist=None):
+	print('---> Start Calc the bird-eye Tarnsform Matrix')
+	
+	# 1) How many images do we have and the size of them
+	prefix='straight_lines'                                # the prefix for the 'straight_lines' images
+	imgs_fnames = glob.glob('test_images/'+prefix+'*.jpg') # all the images with straight_lines
+	n_img = len(imgs_fnames)                               # number of images
+	rgb_undist_img = calibrate_road_image(mtx, dist, idx=0, fname=prefix, plot_en=False) # load a image 
+	img_size = (rgb_undist_img.shape[1], rgb_undist_img.shape[0])  # image size
+	if False: # just to find the points on the original image
+		plt.figure(figsize=(16,8))
+		plt.imshow(rgb_undist_img)
+		plt.show()
+	
+	# 2) we set the points for the trapeze of source images and for the bird-eye image
+	#    Each trapeze is defined by 6 values: y_down, y_up, x_right_down, x_left_down, x_right_down, x_left_up
+	y_down = [689,689]           # for the two images
+	y_up = [450,450]             # for the two images
+	x_right_down = [1055,1062]   # for the two images
+	x_left_down = [250,260]      # for the two images
+	x_right_up = [683,688]       # for the two images
+	x_left_up = [596,595]        # for the two images
+		
+	# 3) Using getPerspectiveTransform we will calculate the transform matrix (and the inverse)  per image
+	src=[]    # will hold all the sources points. trapeze (4 points) for each image
+	dst=[]    # will hold all the destination points. rectangle (4 points) for each image
+	M=[]      # will hold the transform matrix per image
+	M_inv=[]  # will hold the inverse transform matrix per image
+	for i in range(n_img):
+		src.append(np.float32([[x_left_down[i],y_down[i]], [x_left_up[i]  ,y_up[i]],     [x_right_up[i]  ,y_up[i]],     [x_right_down[i],y_down[i]]]))
+		dst.append(np.float32([[x_left_down[i],y_down[i]], [x_left_down[i],0], [x_right_down[i],0], [x_right_down[i],y_down[i]]]))
+		M.append(cv2.getPerspectiveTransform(src[-1], dst[-1]))
+		M_inv.append(cv2.getPerspectiveTransform(dst[-1], src[-1]))
+	
+	# 4) Average the transform matrix (and the inverse)
+	M_avg = np.average(np.array(M),0)
+	M_inv_avg = np.average(np.array(M_inv),0)
+	
+	if plot_en: # plot the straight_lines (after removing distortion) and their birdeye view
+		plt.figure(figsize=(16,8))
+		for i in range(n_img):
+			rgb_undist_img = calibrate_road_image(mtx, dist, idx=i, fname=prefix, plot_en=False)              # get the calibrated image
+			cv2.line(rgb_undist_img, (src[i][0,0],src[i][0,1]), (src[i][1,0],src[i][1,1]), [255,0,0], 2)      # draw the lane lines in the car view image - left lane
+			cv2.line(rgb_undist_img, (src[i][2,0],src[i][2,1]), (src[i][3,0],src[i][3,1]), [255,0,0], 2)      # draw the lane lines in the car view image - right lane
+			plt.subplot(2,2,i+1)
+			plt.imshow(rgb_undist_img)
+			plt.title('Car view:{}'.format(imgs_fnames[i]))
+			
+			warped = cv2.warpPerspective(rgb_undist_img, M[i], img_size)                                      # apply the transformation
+			plt.subplot(2,2,i+3)
+			plt.imshow(warped)
+			plt.title('Birdeye view:{}'.format(imgs_fnames[i]))
 
+		plt.savefig('output_images/birdeye_on_straight_lines.png')
+	
+	# 5) which matrix (and inverse) we want to return
+	if M_op==0: # average matrix
+		M_ret, m_inv_ret = M_avg, M_inv_avg  
+	else: # matrix of straight_lines1 or straight_lines2
+		M_ret, m_inv_ret = M[M_op-1], M_inv[M_op-1]
+	
+	return M_ret, m_inv_ret
 	
 ####  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Part B: Main Pipeline ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~  ####
+
 ###
 ### We will find the calibration parameters, and test it one the test image
 ret, mtx, dist, rvecs, tvecs = find_calibration_params(nx=9, ny=6, dn=3, plot_en=True)	# find Calibration parameters
-rgb_undist_img = calibrate_road_image(mtx, dist, idx=0) # apply the Calibration parameters on one of the test images
+rgb_undist_img = calibrate_road_image(mtx, dist, idx=0, fname='straight_lines', plot_en=True) # apply the Calibration parameters on one of the test images
 
 ###
 ### Next we will try to identify the lane lines on the undistorted image using:
@@ -321,5 +398,4 @@ rgb_undist_img = calibrate_road_image(mtx, dist, idx=0) # apply the Calibration 
 ### We will binary slice the different outputs and finally combine the two (OR operator on the overlapping regions)
 ### We will plot an example on what we got on a random road test image (the same image we got before)
 b_undist_img = apply_binary_th(rgb_undist_img, plot_en=True) # b_ stands for binary  
-
-
+M, M_inv = find_birdeye_matrix(M_op=1, plot_en=True, mtx=mtx, dist=dist)
