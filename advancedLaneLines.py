@@ -7,10 +7,10 @@ import PIL
 from PIL import Image
 import matplotlib.pyplot as plt
 import matplotlib.image as mpimg
+from moviepy.editor import VideoFileClip
 
-
+		
 ####  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Part A: Help Functions ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~  ####
-
 ### plot_dist_vs_undist: plot an image before and after we calibrated the camera
 ###   Input: 
 ###		img_dist: original image in RGB.
@@ -114,22 +114,24 @@ def find_calibration_params(nx, ny, dn, plot_en=False):
 
 ### calibrate_road_image: calibrate and save a random example for a road image using the calibration parameters from the chessboard calibration
 ###   Input: 
+###		img: input (distorted) image. if None we will read it from the test_images folder
 ###		mtx: the camera matrix
 ###		dist: distortion coefficients
-###		idx: the index of the image we want from the test images (0-5) or straight_lines images (0-1). None - for randon index.
+###		idx: the index of the image we want from the test images (0-5) or straight_lines images (0-1). None - for random index.
 ###		fname: the string at the start of the files name
 ###		plot_en: if we want to plot the original image and the calibrated image
 ###
 ###   Output: 
 ###      dst: the undistorted image.	
 ###      save the image before and after calibration.	
-def calibrate_road_image(mtx, dist, idx=None, fname='test', plot_en=False):
-	imgs_fnames = glob.glob('test_images/'+fname+'*.jpg')
-	if idx is None:
-		idx = np.random.randint(low=0, high=len(imgs_fnames))  # choose a random road image
-	idx = max(0,min(idx,len(imgs_fnames)))                     # making sure we are in the range
-	img = cv2.imread(imgs_fnames[idx])                         # read the image
-	img = cv2.cvtColor(img,cv2.COLOR_BGR2RGB)                  # Switch to RGB format
+def calibrate_road_image(img=None, mtx=None, dist=None, idx=None, fname='test', plot_en=False):
+	if (img is None):
+		imgs_fnames = glob.glob('test_images/'+fname+'*.jpg')
+		if idx is None:
+			idx = np.random.randint(low=0, high=len(imgs_fnames))  # choose a random road image
+		idx = max(0,min(idx,len(imgs_fnames)))                     # making sure we are in the range
+		img = cv2.imread(imgs_fnames[idx])                         # read the image
+		img = cv2.cvtColor(img,cv2.COLOR_BGR2RGB)                  # Switch to RGB format
 	dst = cv2.undistort(img, mtx, dist, None, mtx)             # undistorted image
 	if plot_en:
 		plot_dist_vs_undist(img, dst, corners=None, title=imgs_fnames[idx])
@@ -147,7 +149,7 @@ def calibrate_road_image(mtx, dist, idx=None, fname='test', plot_en=False):
 ###   Output: 
 ###      b_sobel_total: binary image after all the thresholds were applied.	
 def sobel_binary_th(rgb_img, kernel_size=3, plot_en=False):
-	print('\t--> Start Sobel Binary Threshold')
+	#print('\t--> Start Sobel Binary Threshold')
 	# 1) convert to gray scale
 	gray_img = cv2.cvtColor(rgb_img, cv2.COLOR_RGB2GRAY)               # convert to gray scale
 
@@ -178,10 +180,10 @@ def sobel_binary_th(rgb_img, kernel_size=3, plot_en=False):
 	for i in range(len(all_sobel)):
 		if ('all_ones' == all_th_en[i]):                            # all ones
 			b_all_sobel.append(np.ones_like(all_sobel[i])) 
-			print('\t\t{}: all Ones'.format(all_sobel_name[i]))
+			#print('\t\t{}: all Ones'.format(all_sobel_name[i]))
 		elif ('all_zeros' == all_th_en[i]):                         # all zeros
 			b_all_sobel.append(np.zeros_like(all_sobel[i])) 
-			print('\t\t{}: all Zeros'.format(all_sobel_name[i]))
+			#print('\t\t{}: all Zeros'.format(all_sobel_name[i]))
 		else:                                                       # normal threshold
 			b_sobel = np.zeros_like(all_sobel[i]) 
 			b_sobel[(all_sobel[i] >= all_th[i,0]) & (all_sobel[i] <= all_th[i,1])] = 1    # apply threshold
@@ -224,7 +226,7 @@ def sobel_binary_th(rgb_img, kernel_size=3, plot_en=False):
 ###   Output: 
 ###      b_color_total: binary image after all the thresholds were applied.	
 def color_binary_th(rgb_img, plot_en=False):
-	print('\t--> Start Color Binary Threshold')
+	#print('\t--> Start Color Binary Threshold')
 	# 1) take the relevant channels: red, Saturation
 	r_img = rgb_img[:,:,0]                                       # Red channel 
 	s_img = cv2.cvtColor(rgb_img, cv2.COLOR_RGB2HLS)[:,:,2]      # Saturation channel 
@@ -241,10 +243,10 @@ def color_binary_th(rgb_img, plot_en=False):
 	for i in range(len(all_clr)):
 		if ('all_ones' == all_th_en[i]):                            # all ones
 			b_all_clr.append(np.ones_like(all_clr[i])) 
-			print('\t\t{}: all Ones'.format(all_clr_name[i]))
+			#print('\t\t{}: all Ones'.format(all_clr_name[i]))
 		elif ('all_zeros' == all_th_en[i]):                         # all zeros
 			b_all_clr.append(np.zeros_like(all_clr[i])) 
-			print('\t\t{}: all Zeros'.format(all_clr_name[i]))
+			#print('\t\t{}: all Zeros'.format(all_clr_name[i]))
 		else:                                                       # normal threshold
 			b_clr = np.zeros_like(all_clr[i]) 
 			b_clr[(all_clr[i] >= all_th[i,0]) & (all_clr[i] <= all_th[i,1])] = 1    # apply threshold
@@ -284,13 +286,19 @@ def color_binary_th(rgb_img, plot_en=False):
 ###   Output: 
 ###      b_total: binary image after all the thresholds were applied	
 def apply_binary_th(rgb_img, plot_en=False):
-	print('---> Start Binary Threshold')
-	b_sobel_undist_img = sobel_binary_th(rgb_img, kernel_size=3, plot_en=True) # b_ stands for binary  
-	b_color_undist_img = color_binary_th(rgb_img, plot_en=True) # b_ stands for binary
+	#print('---> Start Binary Threshold')
+	
+	b_sobel_undist_img = sobel_binary_th(rgb_img, kernel_size=3, plot_en=plot_en) # b_ stands for binary  
+	b_color_undist_img = color_binary_th(rgb_img, plot_en=plot_en) # b_ stands for binary
 
 	# combine all the binary images
 	b_total = np.zeros_like(b_sobel_undist_img)
 	b_total[(b_sobel_undist_img == 1) | (b_color_undist_img == 1)] = 1
+	
+	
+	# combine all the binary images
+	b_total = np.zeros_like(b_color_undist_img)
+	b_total[b_color_undist_img == 1] = 1
 
 	if plot_en: # plot the binary image and the colored binary components
 		color_binary = np.dstack((b_sobel_undist_img, np.zeros_like(b_total),b_color_undist_img)) 
@@ -328,7 +336,7 @@ def find_birdeye_matrix(M_op=0, plot_en=False, mtx=None, dist=None):
 	prefix='straight_lines'                                # the prefix for the 'straight_lines' images
 	imgs_fnames = glob.glob('test_images/'+prefix+'*.jpg') # all the images with straight_lines
 	n_img = len(imgs_fnames)                               # number of images
-	rgb_undist_img = calibrate_road_image(mtx, dist, idx=0, fname=prefix, plot_en=False) # load a image 
+	rgb_undist_img = calibrate_road_image(None, mtx, dist, idx=0, fname=prefix, plot_en=False) # load a image 
 	img_size = (rgb_undist_img.shape[1], rgb_undist_img.shape[0])  # image size
 	if False: # just to find the points on the original image
 		plt.figure(figsize=(16,8))
@@ -362,7 +370,7 @@ def find_birdeye_matrix(M_op=0, plot_en=False, mtx=None, dist=None):
 	if plot_en: # plot the straight_lines (after removing distortion) and their birdeye view
 		plt.figure(figsize=(16,8))
 		for i in range(n_img):
-			rgb_undist_img = calibrate_road_image(mtx, dist, idx=i, fname=prefix, plot_en=False)              # get the calibrated image
+			rgb_undist_img = calibrate_road_image(None, mtx, dist, idx=i, fname=prefix, plot_en=False)              # get the calibrated image
 			cv2.line(rgb_undist_img, (src[i][0,0],src[i][0,1]), (src[i][1,0],src[i][1,1]), [255,0,0], 2)      # draw the lane lines in the car view image - left lane
 			cv2.line(rgb_undist_img, (src[i][2,0],src[i][2,1]), (src[i][3,0],src[i][3,1]), [255,0,0], 2)      # draw the lane lines in the car view image - right lane
 			plt.subplot(2,2,i+1)
@@ -384,83 +392,173 @@ def find_birdeye_matrix(M_op=0, plot_en=False, mtx=None, dist=None):
 	
 	return M_ret, m_inv_ret
 
+
+### calc_curve_offset: calculate the curvature and the offset of the car from the middle of the lanes 
+###   Input: 
+###		img_shape: the image shape
+###		left_fit: the left lane polynomial estimation
+###		right_fit: the right lane polynomial estimation
+###		M_inv: the inverse of the birdeye transform matrix 
+###		plot_en: plot the original image with the polynomial fit, curvature and offset 
+###
+###   Output: 
+###       left_curverad: the curvature estimation for the left lane (in Km)
+###       right_curverad: the curvature estimation for the right lane (in Km)
+###       offset: offset of the car from the middle of the lanes (in cm)
+def calc_curve_offset(img_shape, left_fit, right_fit, M_inv=None, plot_en=False):
+	y_eval = img_shape[1]-1                                                         # y value (nearest to the car) we will calculate the curvature and offset 
+	left_lane_org_x = left_fit[0]*y_eval**2 + left_fit[1]*y_eval + left_fit[2]      # x value (in pixels) of the left lane at y_eval
+	right_lane_org_x = right_fit[0]*y_eval**2 + right_fit[1]*y_eval + right_fit[2]  # x value (in pixels) of the right lane at y_eval
+	lane_width_pix = right_lane_org_x-left_lane_org_x                               # finding the lane width in pixels
+	
+	# Define conversions in x and y from pixels space to meters
+	ym_per_pix = 30/img_shape[1]     # meters per pixel in y dimension
+	xm_per_pix = 3.7/lane_width_pix  # meters per pixel in x dimension
+
+	# find polynomial in the real world space
+	scale_vec = np.float32([xm_per_pix/(ym_per_pix**2), xm_per_pix/ym_per_pix, xm_per_pix])
+	left_fit_cr = left_fit*scale_vec
+	right_fit_cr = right_fit*scale_vec
+
+	# first we find the curvature.
+	left_curverad = ((1 + (2*left_fit_cr[0]*y_eval*ym_per_pix + left_fit_cr[1])**2)**1.5) / np.absolute(2*left_fit_cr[0])
+	right_curverad = ((1 + (2*right_fit_cr[0]*y_eval*ym_per_pix + right_fit_cr[1])**2)**1.5) / np.absolute(2*right_fit_cr[0])
+	left_curverad /= 1000.0 # switching from meters to km
+	right_curverad /= 1000.0 # switching from meters to km
+	
+	# We now find the offset. 
+	offset = ((left_lane_org_x+right_lane_org_x)/2.0 - img_shape[0]/2.0)
+	offset *= (100.0*xm_per_pix) # switching from pixels to cm
+	return left_curverad, right_curverad, offset # switching from meters to km for the curve
+	
+	
+### is_good_lanes: fit a polynomial to the binary birdeye image we get
+###   Input: 
+###		img_shape: image shape
+###		left_fit: the left lane polynomial estimation 
+###		right_fit: the right lane polynomial estimation
+###
+###   Output: 
+###       detected: If we think this is a good estimation
+def is_good_lanes(img_shape, left_fit, right_fit):
+	if left_fit is None:
+		return False
+	
+	y_eval = img_shape[1]-1                                                         # y value (nearest to the car) we will calculate the curvature and offset 
+	left_lane_org_x = left_fit[0]*y_eval**2 + left_fit[1]*y_eval + left_fit[2]      # x value (in pixels) of the left lane at y_eval
+	right_lane_org_x = right_fit[0]*y_eval**2 + right_fit[1]*y_eval + right_fit[2]  # x value (in pixels) of the right lane at y_eval
+	left_curverad, right_curverad, _ = calc_curve_offset(img_shape, left_fit, right_fit)
+	
+	# Conditions that indicate bad estimation 
+	if ((left_lane_org_x > 350) or (left_lane_org_x < 250)):    # wrong position of left line near the car
+		return False
+	if ((right_lane_org_x > 1150) or (left_lane_org_x < 1050)): # wrong position of right line near the car
+		return False
+	if ((left_curverad > 5.0) or (left_curverad < 0.1)):        # wrong left curve
+		return False	
+	if ((right_curverad > 5.0) or (right_curverad < 0.1)):      # wrong right curve
+		return False		
+	
+	return True
+	
 	
 ### fit_lane_line: fit a polynomial to the binary birdeye image we get
-###                      Assume here this is the first image we have
 ###   Input: 
-###		bird_b_undist_img: yhe input image
+###		bird_b_undist_img: the input image
+###		startover: indicate if we will use the left_fit_prev, right_fit_prev for our search zone
+###		left_fit_prev: the left lane polynomial estimation (usually from previous frames) we will use to look for this frame polynomial. if None we will start from scratch 
+###		right_fit_prev: the right lane polynomial estimation (usually from previous frames) we will use to look for this frame polynomial. 
 ###		plot_en: plot the original image and the fit
 ###
 ###   Output: 
-###       TODO	
-def fit_lane_line(bird_b_undist_img, plot_en=False):
-	print('---> Start Fit Polynomial')
+###       left_fit: the coefficients for the 2ed order polynomial of the left lane
+###       right_fit: the coefficients for the 2ed order polynomial of the right lane
+###       detected: we were able to detected good lanes on this frame
+def fit_lane_line(bird_b_undist_img, startover=True, left_fit_prev=None, right_fit_prev=None, plot_en=False):
+	#print('---> Start Fit Polynomial')
 	
-	# 1) we find the starting point of the lanes. We also reate an output image to draw on and  visualize the result
-	histogram = np.sum(bird_b_undist_img[bird_b_undist_img.shape[0]>>1:,:], axis=0)    # Take a histogram of the bottom half of the image
-	out_img = np.dstack((bird_b_undist_img, bird_b_undist_img, bird_b_undist_img))*255 # Create an output image to draw on and visualize the result
-	midpoint = np.int(histogram.shape[0]>>1)
-	leftx_base = np.argmax(histogram[:midpoint])              # Find the peak of the left half of the histogram
-	rightx_base = np.argmax(histogram[midpoint:]) + midpoint  # Find the peak of the left half of the histogram
-
-	# 2) define the sliding window and initialize two vectors (x,y) with all the nonzeros values
-	nwindows = 9                                                # number of sliding windows
-	window_height = np.int(bird_b_undist_img.shape[0]/nwindows) # Set height of windows
-	nonzero = bird_b_undist_img.nonzero()                       # Identify the x and y positions of all nonzero pixels in the image
+	nonzero = bird_b_undist_img.nonzero() # Identify the x and y positions of all nonzero pixels in the image
 	nonzeroy = np.array(nonzero[0])
 	nonzerox = np.array(nonzero[1])
-	
-	
-	# 3) We initialze the strating positions and global values for our scanning 
-	margin = 100                   # Set the width of the windows +/- margin
-	minpix = 50                    # Set minimum number of pixels found to recenter window
-	left_lane_inds = []            # Create empty lists to receive left lane pixel indices
-	right_lane_inds = []           # Create empty lists to receive right lane pixel indices
-	leftx_current = leftx_base     # Current positions to be updated for each window. left lane
-	rightx_current = rightx_base   # Current positions to be updated for each window. right lane
-	
-	# 4) we start step through the windows one by one
-	for window in range(nwindows):
-		# Identify window boundaries in x and y (and right and left)
-		win_y_low = bird_b_undist_img.shape[0] - (window+1)*window_height
-		win_y_high = bird_b_undist_img.shape[0] - window*window_height
-		win_xleft_low = leftx_current - margin
-		win_xleft_high = leftx_current + margin
-		win_xright_low = rightx_current - margin
-		win_xright_high = rightx_current + margin
-		
-		# Draw the windows on the visualization image
-		cv2.rectangle(out_img,(win_xleft_low,win_y_low),(win_xleft_high,win_y_high),(0,255,0), 2) 
-		cv2.rectangle(out_img,(win_xright_low,win_y_low),(win_xright_high,win_y_high),(0,255,0), 2) 
-		
-		# Identify the nonzero pixels in x and y within the window
-		good_left_inds = ((nonzeroy >= win_y_low) & (nonzeroy < win_y_high) & (nonzerox >= win_xleft_low) & (nonzerox < win_xleft_high)).nonzero()[0]
-		good_right_inds = ((nonzeroy >= win_y_low) & (nonzeroy < win_y_high) & (nonzerox >= win_xright_low) & (nonzerox < win_xright_high)).nonzero()[0]
-		# Append these indices to the lists
-		left_lane_inds.append(good_left_inds)
-		right_lane_inds.append(good_right_inds)
-		# If you found > minpix pixels, recenter next window on their mean position
-		if len(good_left_inds) > minpix:
-			leftx_current = np.int(np.mean(nonzerox[good_left_inds]))
-		if len(good_right_inds) > minpix:        
-			rightx_current = np.int(np.mean(nonzerox[good_right_inds]))
+	out_img = np.dstack((bird_b_undist_img, bird_b_undist_img, bird_b_undist_img))*255 # Create an output image to draw on and visualize the result
+	margin = 100                          # Set the width of the windows/poly +/- margin
 
-	# Concatenate the arrays of indices
-	left_lane_inds = np.concatenate(left_lane_inds)
-	right_lane_inds = np.concatenate(right_lane_inds)
+	if startover:
+		#print('\t--> Start over')
+		# 1) we find the starting point of the lanes. We also reate an output image to draw on and  visualize the result
+		histogram = np.sum(bird_b_undist_img[bird_b_undist_img.shape[0]>>1:,:], axis=0)    # Take a histogram of the bottom half of the image
+		midpoint = np.int(histogram.shape[0]>>1)
+		leftx_base = np.argmax(histogram[:midpoint])              # Find the peak of the left half of the histogram
+		rightx_base = np.argmax(histogram[midpoint:]) + midpoint  # Find the peak of the left half of the histogram
 
+		# 2) define the sliding window and initialize two vectors (x,y) with all the nonzeros values
+		nwindows = 9                                                # number of sliding windows
+		window_height = np.int(bird_b_undist_img.shape[0]/nwindows) # Set height of windows
+
+		
+		# 3) We initialze the strating positions and global values for our scanning 
+		minpix_per = 1                 # Set the percentage of minimum number of pixels found to recenter window
+		minpix = int((minpix_per*window_height*margin*2)/100)    # Set the minimum number of pixels found to recenter window
+		left_lane_inds = []            # Create empty lists to receive left lane pixel indices
+		right_lane_inds = []           # Create empty lists to receive right lane pixel indices
+		leftx_current = leftx_base     # Current positions to be updated for each window. left lane
+		rightx_current = rightx_base   # Current positions to be updated for each window. right lane
+		
+		
+		# 4) we start step through the windows one by one
+		for window in range(nwindows):
+			# Identify window boundaries in x and y (and right and left)
+			win_y_low = bird_b_undist_img.shape[0] - (window+1)*window_height
+			win_y_high = bird_b_undist_img.shape[0] - window*window_height
+			win_xleft_low = leftx_current - margin
+			win_xleft_high = leftx_current + margin
+			win_xright_low = rightx_current - margin
+			win_xright_high = rightx_current + margin
+			
+			# Draw the windows on the visualization image
+			cv2.rectangle(out_img,(win_xleft_low,win_y_low),(win_xleft_high,win_y_high),(0,255,0), 2) 
+			cv2.rectangle(out_img,(win_xright_low,win_y_low),(win_xright_high,win_y_high),(0,255,0), 2) 
+			
+			# Identify the nonzero pixels in x and y within the window
+			good_left_inds = ((nonzeroy >= win_y_low) & (nonzeroy < win_y_high) & (nonzerox >= win_xleft_low) & (nonzerox < win_xleft_high)).nonzero()[0]
+			good_right_inds = ((nonzeroy >= win_y_low) & (nonzeroy < win_y_high) & (nonzerox >= win_xright_low) & (nonzerox < win_xright_high)).nonzero()[0]
+			
+			# If you found > minpix pixels, recenter next window on their mean position and add this indications to the lane (this is not just noise)
+			if len(good_left_inds) > minpix:
+				left_lane_inds.append(good_left_inds)    # Append these indices to the lists
+				leftx_current = np.int(np.mean(nonzerox[good_left_inds]))
+			if len(good_right_inds) > minpix: 
+				right_lane_inds.append(good_right_inds)	 # Append these indices to the lists	
+				rightx_current = np.int(np.mean(nonzerox[good_right_inds]))
+		
+		if (len(left_lane_inds) and len(right_lane_inds)):
+			# Concatenate the arrays of indices
+			left_lane_inds = np.concatenate(left_lane_inds) 
+			right_lane_inds = np.concatenate(right_lane_inds)
+	else: # use input polynomial
+		#print('\t--> Use Previuos Polynomial')
+		left_lane_inds = ((nonzerox > (left_fit_prev[0]*(nonzeroy**2) + left_fit_prev[1]*nonzeroy + left_fit_prev[2] - margin)) & (nonzerox < (left_fit_prev[0]*(nonzeroy**2) + left_fit_prev[1]*nonzeroy + left_fit_prev[2] + margin))) 
+		right_lane_inds = ((nonzerox > (right_fit_prev[0]*(nonzeroy**2) + right_fit_prev[1]*nonzeroy + right_fit_prev[2] - margin)) & (nonzerox < (right_fit_prev[0]*(nonzeroy**2) + right_fit_prev[1]*nonzeroy + right_fit_prev[2] + margin)))  
+
+
+	left_fit = None
+	right_fit = None
+	left_lane_inds = np.array(left_lane_inds)
+	right_lane_inds = np.array(right_lane_inds)
+	
 	# Extract left and right line pixel positions
 	leftx = nonzerox[left_lane_inds]
 	lefty = nonzeroy[left_lane_inds] 
 	rightx = nonzerox[right_lane_inds]
 	righty = nonzeroy[right_lane_inds] 
 
-	# Fit a second order polynomial to each
-	left_fit = np.polyfit(lefty, leftx, 2)
-	right_fit = np.polyfit(righty, rightx, 2)
+	if (len(leftx) and len(rightx)):
+		# Fit a second order polynomial to each
+		left_fit = np.polyfit(lefty, leftx, 2)
+		right_fit = np.polyfit(righty, rightx, 2)
 
-	
-	if plot_en:
+
+	if (plot_en and left_fit is not None):
 		plt.figure(figsize=(16,8))
 		# Generate x and y values for plotting
 		ploty = np.linspace(0, bird_b_undist_img.shape[0]-1, bird_b_undist_img.shape[0] )
@@ -469,22 +567,97 @@ def fit_lane_line(bird_b_undist_img, plot_en=False):
 
 		out_img[nonzeroy[left_lane_inds], nonzerox[left_lane_inds]] = [255, 0, 0]
 		out_img[nonzeroy[right_lane_inds], nonzerox[right_lane_inds]] = [0, 0, 255]
-		plt.imshow(out_img)
+		result = out_img
+		
+		if startover==False:
+			# Generate a polygon to illustrate the search window area
+			# And recast the x and y points into usable format for cv2.fillPoly()
+			window_img = np.zeros_like(out_img)
+			left_line_window1 = np.array([np.transpose(np.vstack([left_fitx-margin, ploty]))])
+			left_line_window2 = np.array([np.flipud(np.transpose(np.vstack([left_fitx+margin, ploty])))])
+			left_line_pts = np.hstack((left_line_window1, left_line_window2))
+			right_line_window1 = np.array([np.transpose(np.vstack([right_fitx-margin, ploty]))])
+			right_line_window2 = np.array([np.flipud(np.transpose(np.vstack([right_fitx+margin, ploty])))])
+			right_line_pts = np.hstack((right_line_window1, right_line_window2))
+			
+			cv2.fillPoly(window_img, np.int_([left_line_pts]), (0,255, 0))
+			cv2.fillPoly(window_img, np.int_([right_line_pts]), (0,255, 0))
+			result = cv2.addWeighted(out_img, 1, window_img, 0.3, 0)
+		
+		plt.imshow(result)
 		plt.plot(left_fitx, ploty, color='yellow')
 		plt.plot(right_fitx, ploty, color='yellow')
-		plt.xlim(0, 1280)
-		plt.ylim(720, 0)
+		plt.title('Polynomial Fit')
+		plt.xlim(0, bird_b_undist_img.shape[1])
+		plt.ylim(bird_b_undist_img.shape[0], 0)
 		
-		plt.savefig('output_images/fit_polynomial.png')
+		if startover:
+			plt.savefig('output_images/fit_polynomial_startover.png')
+		else:
+			plt.savefig('output_images/fit_polynomial_use_prev.png')
+	
+	detected = is_good_lanes((bird_b_undist_img.shape[1],bird_b_undist_img.shape[0]), left_fit, right_fit)
+	return left_fit, right_fit, detected
 	
 	
-####  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Part B: Main Pipeline ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~  ####
+### draw_lane_lines: calculate the curvature and the offset of the car from the middle of the lanes 
+###   Input: 
+###		rgb_undist_img: the undistorted image
+###		left_fit: the left lane polynomial estimation
+###		right_fit: the right lane polynomial estimation
+###		M_inv: the inverse of the birdeye transform matrix 
+###		plot_en: plot the original image with the polynomial fit, curvature and offset 
+###
+###   Output: 
+###       result: the image with the lane lines estimation
+def draw_lane_lines(rgb_undist_img, left_fit, right_fit, M_inv=None, plot_en=False):
+	#print('---> Start Curvature and Offset Calculation')
+	
+	img_shape = (rgb_undist_img.shape[1], rgb_undist_img.shape[0])                  # image shape (Xmax, Ymax)
+	curve_left, curve_right, offset = calc_curve_offset(img_shape, left_fit, right_fit, M_inv=None, plot_en=False)
+	
+	ploty = np.linspace(0, img_shape[1]-1, img_shape[1])                            # Generate y values for calculation
 
+	# Create an image to draw the lines on
+	color_warp = np.zeros_like(rgb_undist_img).astype(np.uint8)
+	#color_warp = np.dstack((warp_zero, warp_zero, warp_zero))
+	
+	left_fitx = left_fit[0]*ploty**2 + left_fit[1]*ploty + left_fit[2]
+	right_fitx = right_fit[0]*ploty**2 + right_fit[1]*ploty + right_fit[2]
+
+	# Recast the x and y points into usable format for cv2.fillPoly()
+	pts_left = np.array([np.transpose(np.vstack([left_fitx, ploty]))])
+	pts_right = np.array([np.flipud(np.transpose(np.vstack([right_fitx, ploty])))])
+	pts = np.hstack((pts_left, pts_right))
+
+	# Draw the lane onto the warped blank image
+	cv2.fillPoly(color_warp, np.int_([pts]), (0,255,0))
+
+	# Warp the blank back to original image space using inverse perspective matrix (Minv)
+	newwarp = cv2.warpPerspective(color_warp, M_inv, img_shape) 
+	# Combine the result with the original image
+	result = cv2.addWeighted(rgb_undist_img, 1, newwarp, 0.3, 0)
+	
+	curve = (curve_left+curve_right)/2.0 # average the curve
+	cv2.putText(result,'curve = {:.2f} Km'.format(curve),(500,img_shape[1]-80), cv2.FONT_HERSHEY_SIMPLEX, 1,(0,0,0),2)
+	cv2.putText(result,'offset = {:.1f} cm'.format(offset),(500,img_shape[1]-30), cv2.FONT_HERSHEY_SIMPLEX, 1,(0,0,0),2)
+		
+	if plot_en:
+		plt.figure(figsize=(16,8))
+		plt.title('Founded Lane')
+		plt.imshow(result)	
+		plt.savefig('output_images/final_est_lane.png')
+	
+	return result
+
+
+	
+####  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Part B: Main Pipeline - We use it for the test images ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~  ####
 ###
 ### Stage 1: We will find the calibration parameters, and test it one the test image
 ### 		 We will plot an example on the chessboard
 ret, mtx, dist, rvecs, tvecs = find_calibration_params(nx=9, ny=6, dn=3, plot_en=True)	# find Calibration parameters
-rgb_undist_img = calibrate_road_image(mtx, dist, idx=0, fname='test', plot_en=True) # apply the Calibration parameters on one of the test images
+rgb_undist_img = calibrate_road_image(None, mtx, dist, idx=1, fname='test', plot_en=True) # apply the Calibration parameters on one of the test images
 
 ###
 ### Stage 2: We will try to identify the lane lines on the undistorted image using:
@@ -503,6 +676,71 @@ bird_b_undist_img = cv2.warpPerspective(b_undist_img, M, (rgb_undist_img.shape[1
 
 ###
 ### Stage 4: We will fit a polynomial to the lane lines we found.
-###          Assume here this is the first image we have
+###          Two options: 
+###                A) assume this is the first image we have
+###                B) Use input polynomial (from previous frames) to locate indications for the new polynomial
 ### 		 We will plot an example of it
-fit_lane_line(bird_b_undist_img, plot_en=True)
+left_fit, right_fit, detected  = fit_lane_line(bird_b_undist_img, startover=True, plot_en=True) # Option A
+left_fit, right_fit, detected = fit_lane_line(bird_b_undist_img, startover=False, left_fit_prev=left_fit, right_fit_prev=right_fit, plot_en=True) # Option B, just to check both modes 
+
+###
+### Stage 5: We will calculate the curvature and the offset of the car from the middle of the lanes.
+###          We draw the estimated lane lines, curvature and the offset on the original image
+result = draw_lane_lines(rgb_undist_img, left_fit, right_fit, M_inv=M_inv, plot_en=True)
+
+
+
+
+
+####  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Part C: Video ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~  ####
+
+### process_image: This is the main pipeline. we take the input rgb image, estimate the lane lines and draw them on the image 
+###   Input: 
+###		img: the input RGB image 
+###
+###   Output: 
+###       result: the image with the lane lines estimation
+def process_image(img):
+	# define static vars
+	if not hasattr(process_image, "first_frame"):
+		process_image.first_frame = True  # it doesn't exist yet, so initialize it
+	if not hasattr(process_image, "n_bad_frames"):
+		process_image.n_bad_frames = 1000  # it doesn't exist yet, so initialize it
+	if not hasattr(process_image, "left_fit"):
+		process_image.left_fit = None  # it doesn't exist yet, so initialize it
+	if not hasattr(process_image, "right_fit"):
+		process_image.right_fit = None  # it doesn't exist yet, so initialize it
+
+	# define const vars
+	a = 0.125 # the IIR filter coeff. The weight of the current estimation
+
+	# Main pipe line
+	rgb_undist_img = calibrate_road_image(img, mtx, dist)                                          # apply the Calibration parameters on the image
+	b_img = apply_binary_th(rgb_undist_img)                                                        # binary image we will use to estimate the lane lines
+	w_img = cv2.warpPerspective(b_img, M, (img.shape[1], img.shape[0]))                            # apply the birdeye matrix
+	left_fit_curr, right_fit_curr, detected = fit_lane_line(w_img, startover=(process_image.n_bad_frames>5), left_fit_prev=process_image.left_fit, right_fit_prev=process_image.right_fit)   # find the lane line fit
+
+	# we average the current fit with the old fit if the current fit looks OK
+	if process_image.first_frame: # first time ever
+		process_image.left_fit = left_fit_curr
+		process_image.right_fit = right_fit_curr
+		process_image.first_frame = False
+		if detected:
+			process_image.n_bad_frames = 0
+	else:
+		if detected:     # the current estimation looks good, we weight it with the previous estimation (IIR)
+			process_image.left_fit = (1.0-a)*process_image.left_fit + a*left_fit_curr
+			process_image.right_fit = (1.0-a)*process_image.right_fit + a*right_fit_curr
+			process_image.n_bad_frames = 0
+		else:
+			process_image.n_bad_frames += 1
+	
+	result = draw_lane_lines(rgb_undist_img, process_image.left_fit, process_image.right_fit, M_inv=M_inv)                   # draw the estimated lane lines, the curvature and the offset
+	return result
+
+## Read the video and add the estimated lane lines on it
+output = 'project_video_with_lane_est.mp4'
+clip = VideoFileClip("project_video.mp4")
+out_clip = clip.fl_image(process_image) 
+out_clip.write_videofile(output, audio=False)
+
