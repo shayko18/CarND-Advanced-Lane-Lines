@@ -132,9 +132,12 @@ def calibrate_road_image(img=None, mtx=None, dist=None, idx=None, fname='test', 
 		idx = max(0,min(idx,len(imgs_fnames)))                     # making sure we are in the range
 		img = cv2.imread(imgs_fnames[idx])                         # read the image
 		img = cv2.cvtColor(img,cv2.COLOR_BGR2RGB)                  # Switch to RGB format
+		img_title = imgs_fnames[idx]
+	else:
+		img_title = fname
 	dst = cv2.undistort(img, mtx, dist, None, mtx)             # undistorted image
 	if plot_en:
-		plot_dist_vs_undist(img, dst, corners=None, title=imgs_fnames[idx])
+		plot_dist_vs_undist(img, dst, corners=None, title=img_title)
 	return dst
 	
 
@@ -174,7 +177,7 @@ def sobel_binary_th(rgb_img, kernel_size=3, plot_en=False):
 	# 3) creating binary images - each will threshold a different sobel information 
 	#    We start by setting the thresholds
 	all_th_en=['th', 'all_ones', 'all_zeros', 'all_zeros'] # threshold enablers: "all zeros", "all ones" or to use the threshols  
-	all_th = np.array([[20,100], [80,100], [70,100], [0.7, 1.3]]) # the threshold for each sobel function
+	all_th = np.array([[30,200], [80,100], [70,100], [0.7, 1.3]]) # the threshold for each sobel function
 	
 	b_all_sobel = [] # a list of the binary sobels after we use the threshold
 	for i in range(len(all_sobel)):
@@ -237,7 +240,7 @@ def color_binary_th(rgb_img, plot_en=False):
 	# 2) creating binary images - each will threshold a different channel 
 	#    We start by setting the thresholds
 	all_th_en=['all_zeros', 'th'] # threshold enablers: "all zeros", "all ones" or to use the threshols  
-	all_th = np.array([[170,255], [170,255]]) # the threshold for each channel
+	all_th = np.array([[170,255], [175,230]]) # the threshold for each channel
 	
 	b_all_clr = [] # a list of the binary channels after we use the threshold
 	for i in range(len(all_clr)):
@@ -295,10 +298,6 @@ def apply_binary_th(rgb_img, plot_en=False):
 	b_total = np.zeros_like(b_sobel_undist_img)
 	b_total[(b_sobel_undist_img == 1) | (b_color_undist_img == 1)] = 1
 	
-	
-	# combine all the binary images
-	b_total = np.zeros_like(b_color_undist_img)
-	b_total[b_color_undist_img == 1] = 1
 
 	if plot_en: # plot the binary image and the colored binary components
 		color_binary = np.dstack((b_sobel_undist_img, np.zeros_like(b_total),b_color_undist_img)) 
@@ -406,6 +405,9 @@ def find_birdeye_matrix(M_op=0, plot_en=False, mtx=None, dist=None):
 ###       right_curverad: the curvature estimation for the right lane (in Km)
 ###       offset: offset of the car from the middle of the lanes (in cm)
 def calc_curve_offset(img_shape, left_fit, right_fit, M_inv=None, plot_en=False):
+	if left_fit is None:  # we dont have a valid polyfit
+		return 0.0, 0.0, 0.0
+	
 	y_eval = img_shape[1]-1                                                         # y value (nearest to the car) we will calculate the curvature and offset 
 	left_lane_org_x = left_fit[0]*y_eval**2 + left_fit[1]*y_eval + left_fit[2]      # x value (in pixels) of the left lane at y_eval
 	right_lane_org_x = right_fit[0]*y_eval**2 + right_fit[1]*y_eval + right_fit[2]  # x value (in pixels) of the right lane at y_eval
@@ -414,7 +416,7 @@ def calc_curve_offset(img_shape, left_fit, right_fit, M_inv=None, plot_en=False)
 	# Define conversions in x and y from pixels space to meters
 	ym_per_pix = 30/img_shape[1]     # meters per pixel in y dimension
 	xm_per_pix = 3.7/lane_width_pix  # meters per pixel in x dimension
-
+	
 	# find polynomial in the real world space
 	scale_vec = np.float32([xm_per_pix/(ym_per_pix**2), xm_per_pix/ym_per_pix, xm_per_pix])
 	left_fit_cr = left_fit*scale_vec
@@ -425,6 +427,7 @@ def calc_curve_offset(img_shape, left_fit, right_fit, M_inv=None, plot_en=False)
 	right_curverad = ((1 + (2*right_fit_cr[0]*y_eval*ym_per_pix + right_fit_cr[1])**2)**1.5) / np.absolute(2*right_fit_cr[0])
 	left_curverad /= 1000.0 # switching from meters to km
 	right_curverad /= 1000.0 # switching from meters to km
+
 	
 	# We now find the offset. 
 	offset = ((left_lane_org_x+right_lane_org_x)/2.0 - img_shape[0]/2.0)
@@ -440,9 +443,10 @@ def calc_curve_offset(img_shape, left_fit, right_fit, M_inv=None, plot_en=False)
 ###
 ###   Output: 
 ###       detected: If we think this is a good estimation
+###       detected_case: what was the reason for not enabling to detected a good line
 def is_good_lanes(img_shape, left_fit, right_fit):
 	if left_fit is None:
-		return False
+		return False, 1
 	
 	y_eval = img_shape[1]-1                                                         # y value (nearest to the car) we will calculate the curvature and offset 
 	left_lane_org_x = left_fit[0]*y_eval**2 + left_fit[1]*y_eval + left_fit[2]      # x value (in pixels) of the left lane at y_eval
@@ -450,16 +454,16 @@ def is_good_lanes(img_shape, left_fit, right_fit):
 	left_curverad, right_curverad, _ = calc_curve_offset(img_shape, left_fit, right_fit)
 	
 	# Conditions that indicate bad estimation 
-	if ((left_lane_org_x > 350) or (left_lane_org_x < 250)):    # wrong position of left line near the car
-		return False
-	if ((right_lane_org_x > 1150) or (left_lane_org_x < 1050)): # wrong position of right line near the car
-		return False
-	if ((left_curverad > 5.0) or (left_curverad < 0.1)):        # wrong left curve
-		return False	
-	if ((right_curverad > 5.0) or (right_curverad < 0.1)):      # wrong right curve
-		return False		
+	if ((left_lane_org_x > 400) or (left_lane_org_x < 200)):    # wrong position of left line near the car
+		return False, 2
+	if ((right_lane_org_x > 1200) or (right_lane_org_x < 1000)): # wrong position of right line near the car
+		return False, 3
+	if ((left_curverad > 15.0) or (left_curverad < 0.1)):        # wrong left curve
+		return False, 4	
+	if ((right_curverad > 15.0) or (right_curverad < 0.1)):      # wrong right curve
+		return False, 5		
 	
-	return True
+	return True, 0
 	
 	
 ### fit_lane_line: fit a polynomial to the binary birdeye image we get
@@ -474,6 +478,7 @@ def is_good_lanes(img_shape, left_fit, right_fit):
 ###       left_fit: the coefficients for the 2ed order polynomial of the left lane
 ###       right_fit: the coefficients for the 2ed order polynomial of the right lane
 ###       detected: we were able to detected good lanes on this frame
+###       detected_case: what was the reason for not enabling to detected a good line
 def fit_lane_line(bird_b_undist_img, startover=True, left_fit_prev=None, right_fit_prev=None, plot_en=False):
 	#print('---> Start Fit Polynomial')
 	
@@ -497,7 +502,7 @@ def fit_lane_line(bird_b_undist_img, startover=True, left_fit_prev=None, right_f
 
 		
 		# 3) We initialze the strating positions and global values for our scanning 
-		minpix_per = 1                 # Set the percentage of minimum number of pixels found to recenter window
+		minpix_per = 0.3               # Set the percentage of minimum number of pixels found to recenter window
 		minpix = int((minpix_per*window_height*margin*2)/100)    # Set the minimum number of pixels found to recenter window
 		left_lane_inds = []            # Create empty lists to receive left lane pixel indices
 		right_lane_inds = []           # Create empty lists to receive right lane pixel indices
@@ -524,13 +529,12 @@ def fit_lane_line(bird_b_undist_img, startover=True, left_fit_prev=None, right_f
 			good_right_inds = ((nonzeroy >= win_y_low) & (nonzeroy < win_y_high) & (nonzerox >= win_xright_low) & (nonzerox < win_xright_high)).nonzero()[0]
 			
 			# If you found > minpix pixels, recenter next window on their mean position and add this indications to the lane (this is not just noise)
-			if len(good_left_inds) > minpix:
+			if len(good_left_inds) > minpix:   # TODO
 				left_lane_inds.append(good_left_inds)    # Append these indices to the lists
 				leftx_current = np.int(np.mean(nonzerox[good_left_inds]))
 			if len(good_right_inds) > minpix: 
 				right_lane_inds.append(good_right_inds)	 # Append these indices to the lists	
 				rightx_current = np.int(np.mean(nonzerox[good_right_inds]))
-		
 		if (len(left_lane_inds) and len(right_lane_inds)):
 			# Concatenate the arrays of indices
 			left_lane_inds = np.concatenate(left_lane_inds) 
@@ -543,19 +547,17 @@ def fit_lane_line(bird_b_undist_img, startover=True, left_fit_prev=None, right_f
 
 	left_fit = None
 	right_fit = None
-	left_lane_inds = np.array(left_lane_inds)
-	right_lane_inds = np.array(right_lane_inds)
-	
-	# Extract left and right line pixel positions
-	leftx = nonzerox[left_lane_inds]
-	lefty = nonzeroy[left_lane_inds] 
-	rightx = nonzerox[right_lane_inds]
-	righty = nonzeroy[right_lane_inds] 
+	if (len(left_lane_inds) and len(right_lane_inds)):
+		# Extract left and right line pixel positions
+		leftx = nonzerox[left_lane_inds]
+		lefty = nonzeroy[left_lane_inds] 
+		rightx = nonzerox[right_lane_inds]
+		righty = nonzeroy[right_lane_inds] 
 
-	if (len(leftx) and len(rightx)):
-		# Fit a second order polynomial to each
-		left_fit = np.polyfit(lefty, leftx, 2)
-		right_fit = np.polyfit(righty, rightx, 2)
+		if (len(leftx) and len(rightx)):
+			# Fit a second order polynomial to each
+			left_fit = np.polyfit(lefty, leftx, 2)
+			right_fit = np.polyfit(righty, rightx, 2)
 
 
 	if (plot_en and left_fit is not None):
@@ -596,8 +598,8 @@ def fit_lane_line(bird_b_undist_img, startover=True, left_fit_prev=None, right_f
 		else:
 			plt.savefig('output_images/fit_polynomial_use_prev.png')
 	
-	detected = is_good_lanes((bird_b_undist_img.shape[1],bird_b_undist_img.shape[0]), left_fit, right_fit)
-	return left_fit, right_fit, detected
+	detected, detected_case = is_good_lanes((bird_b_undist_img.shape[1],bird_b_undist_img.shape[0]), left_fit, right_fit)
+	return left_fit, right_fit, detected, detected_case
 	
 	
 ### draw_lane_lines: calculate the curvature and the offset of the car from the middle of the lanes 
@@ -615,12 +617,10 @@ def draw_lane_lines(rgb_undist_img, left_fit, right_fit, M_inv=None, plot_en=Fal
 	
 	img_shape = (rgb_undist_img.shape[1], rgb_undist_img.shape[0])                  # image shape (Xmax, Ymax)
 	curve_left, curve_right, offset = calc_curve_offset(img_shape, left_fit, right_fit, M_inv=None, plot_en=False)
-	
 	ploty = np.linspace(0, img_shape[1]-1, img_shape[1])                            # Generate y values for calculation
 
 	# Create an image to draw the lines on
 	color_warp = np.zeros_like(rgb_undist_img).astype(np.uint8)
-	#color_warp = np.dstack((warp_zero, warp_zero, warp_zero))
 	
 	left_fitx = left_fit[0]*ploty**2 + left_fit[1]*ploty + left_fit[2]
 	right_fitx = right_fit[0]*ploty**2 + right_fit[1]*ploty + right_fit[2]
@@ -651,56 +651,29 @@ def draw_lane_lines(rgb_undist_img, left_fit, right_fit, M_inv=None, plot_en=Fal
 	return result
 
 
-	
-####  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Part B: Main Pipeline - We use it for the test images ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~  ####
+####  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Part B: PreProcessing - calibration and birteye ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~  ####
 ###
 ### Stage 1: We will find the calibration parameters, and test it one the test image
 ### 		 We will plot an example on the chessboard
 ret, mtx, dist, rvecs, tvecs = find_calibration_params(nx=9, ny=6, dn=3, plot_en=True)	# find Calibration parameters
-rgb_undist_img = calibrate_road_image(None, mtx, dist, idx=1, fname='test', plot_en=True) # apply the Calibration parameters on one of the test images
-
+	
 ###
-### Stage 2: We will try to identify the lane lines on the undistorted image using:
-###      		- sobel (gradient vector)
-###       		- thresholding in different color spaces 
-### 		We will binary slice the different outputs and finally combine the two (OR operator on the overlapping regions)
-### 		We will plot an example on what we got on a random road test image (the same image we got before)
-b_undist_img = apply_binary_th(rgb_undist_img, plot_en=True) # b_ stands for binary  
-
-
-###
-### Stage 3: We will calculate the birdeye transform matrix (and its inverse):
+### Stage 2: We will calculate the birdeye transform matrix (and its inverse):
 ### 		 We will plot an example on the straight_lines images
-M, M_inv = find_birdeye_matrix(M_op=1, plot_en=True, mtx=mtx, dist=dist)                                       # calc the matrix
-bird_b_undist_img = cv2.warpPerspective(b_undist_img, M, (rgb_undist_img.shape[1], rgb_undist_img.shape[0])) # apply the matrix
-
-###
-### Stage 4: We will fit a polynomial to the lane lines we found.
-###          Two options: 
-###                A) assume this is the first image we have
-###                B) Use input polynomial (from previous frames) to locate indications for the new polynomial
-### 		 We will plot an example of it
-left_fit, right_fit, detected  = fit_lane_line(bird_b_undist_img, startover=True, plot_en=True) # Option A
-left_fit, right_fit, detected = fit_lane_line(bird_b_undist_img, startover=False, left_fit_prev=left_fit, right_fit_prev=right_fit, plot_en=True) # Option B, just to check both modes 
-
-###
-### Stage 5: We will calculate the curvature and the offset of the car from the middle of the lanes.
-###          We draw the estimated lane lines, curvature and the offset on the original image
-result = draw_lane_lines(rgb_undist_img, left_fit, right_fit, M_inv=M_inv, plot_en=True)
+M, M_inv = find_birdeye_matrix(M_op=1, plot_en=True, mtx=mtx, dist=dist)                # calc the matrix
 
 
 
-
-
-####  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Part C: Video ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~  ####
-
+####  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Part C: Main Pipeline ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~  ####
 ### process_image: This is the main pipeline. we take the input rgb image, estimate the lane lines and draw them on the image 
 ###   Input: 
 ###		img: the input RGB image 
+###		single_img: single image or video mode
+###		fname: relevant for single mode - just to print the image we worked on 
 ###
 ###   Output: 
 ###       result: the image with the lane lines estimation
-def process_image(img):
+def process_image(img, single_img=False, fname=''):
 	# define static vars
 	if not hasattr(process_image, "first_frame"):
 		process_image.first_frame = True  # it doesn't exist yet, so initialize it
@@ -710,37 +683,92 @@ def process_image(img):
 		process_image.left_fit = None  # it doesn't exist yet, so initialize it
 	if not hasattr(process_image, "right_fit"):
 		process_image.right_fit = None  # it doesn't exist yet, so initialize it
+	if not hasattr(process_image, "cnt"):
+		process_image.cnt = 0  # it doesn't exist yet, so initialize it
+	if not hasattr(process_image, "detected_case_vec"):
+		process_image.detected_case_vec = np.array([0,0,0,0,0,0])  # it doesn't exist yet, so initialize it
 
 	# define const vars
-	a = 0.125 # the IIR filter coeff. The weight of the current estimation
+	a_good = 0.75 # the IIR filter coeff. The weight of the current estimation when detected=True
+	a_bad = 0.25  # the IIR filter coeff. The weight of the current estimation when detected=False
+	bad_frames_th = 3 # number of consecutive bad frames before we startover in the polyfit estimation
 
-	# Main pipe line
-	rgb_undist_img = calibrate_road_image(img, mtx, dist)                                          # apply the Calibration parameters on the image
-	b_img = apply_binary_th(rgb_undist_img)                                                        # binary image we will use to estimate the lane lines
-	w_img = cv2.warpPerspective(b_img, M, (img.shape[1], img.shape[0]))                            # apply the birdeye matrix
-	left_fit_curr, right_fit_curr, detected = fit_lane_line(w_img, startover=(process_image.n_bad_frames>5), left_fit_prev=process_image.left_fit, right_fit_prev=process_image.right_fit)   # find the lane line fit
-
-	# we average the current fit with the old fit if the current fit looks OK
+	# Main pipe line:
+	# Stage 1) We apply the calibrate parameters (matrix and distortion) we found before on the image
+	# Stage 2) binary thresholding
+	#          We will try to identify the lane lines on the undistorted image using:
+    #  		    - sobel (gradient vector)
+    #   		- thresholding in different color spaces 
+ 	#	       We will binary slice the different outputs and finally combine the two (OR operator on the overlapping regions)
+	# Stage 3) We will applay the birdeye transform matrix we found before to get the birdeye view
+	# Stage 4) We will fit a polynomial to the lane lines we found.
+    #          Two options: 
+    #                A) assume this is the first image we have
+    #                B) Use input polynomial (from previous frames) to locate indications for the new polynomial
+	rgb_undist_img = calibrate_road_image(img, mtx, dist, fname=fname, plot_en=single_img)                                    # apply the Calibration parameters on one of the test images
+	b_undist_img = apply_binary_th(rgb_undist_img, plot_en=single_img)                                           # b_ stands for binary  
+	bird_b_undist_img = cv2.warpPerspective(b_undist_img, M, (rgb_undist_img.shape[1], rgb_undist_img.shape[0])) # apply the matrix
+	left_fit_curr, right_fit_curr, detected, detected_case = fit_lane_line(bird_b_undist_img, startover=(process_image.n_bad_frames>bad_frames_th), left_fit_prev=process_image.left_fit, right_fit_prev=process_image.right_fit, plot_en=single_img)   # find the lane line fit
+	
+	
+	# Stage 5) we average the current fit with the old fit if the current fit looks OK
+	#          we use an IIR filter with a single coeff: y[n]=(1-a)*y[n-1]+a*x[n]
+	#          if we get a bad frame (we assume the polyfit of it was nor right) we use the old ployfit we had  
+	#          if we get more than 'bad_frames_th' bad frames we startover in the polyfit estimation  
 	if process_image.first_frame: # first time ever
 		process_image.left_fit = left_fit_curr
 		process_image.right_fit = right_fit_curr
-		process_image.first_frame = False
+		process_image.first_frame = single_img
 		if detected:
-			process_image.n_bad_frames = 0
-	else:
+			process_image.n_bad_frames = 1000
+	else:	
 		if detected:     # the current estimation looks good, we weight it with the previous estimation (IIR)
-			process_image.left_fit = (1.0-a)*process_image.left_fit + a*left_fit_curr
-			process_image.right_fit = (1.0-a)*process_image.right_fit + a*right_fit_curr
+			a = a_good
 			process_image.n_bad_frames = 0
 		else:
+			a = a_bad
 			process_image.n_bad_frames += 1
+		
+		process_image.left_fit = (1.0-a)*process_image.left_fit + a*left_fit_curr
+		process_image.right_fit = (1.0-a)*process_image.right_fit + a*right_fit_curr
 	
-	result = draw_lane_lines(rgb_undist_img, process_image.left_fit, process_image.right_fit, M_inv=M_inv)                   # draw the estimated lane lines, the curvature and the offset
+	# Stage 6) We will calculate the curvature and the offset of the car from the middle of the lanes.
+    #          We draw the estimated lane lines, curvature and the offset on the original image) plot the result + calculate the curve and the offset
+	result = draw_lane_lines(rgb_undist_img, process_image.left_fit, process_image.right_fit, M_inv=M_inv, plot_en=single_img)    # draw the estimated lane lines, the curvature and the offset
+	
+	if (True and single_img==False): # for debug
+		cv2.imwrite("video_images/img" + str(process_image.cnt) + ".jpg", cv2.cvtColor(img, cv2.COLOR_RGB2BGR))	
+		cv2.imwrite("video_images/" +str(detected) + "_res" + str(process_image.cnt) + ".jpg", cv2.cvtColor(result, cv2.COLOR_RGB2BGR))		
+	
+	process_image.detected_case_vec[detected_case] += 1
+	if (single_img):
+		print('Image detected = {}, detected_case={}'.format(detected,detected_case))
+	
+	process_image.cnt+=1
+	if ((process_image.cnt%100)==0):
+		print('cnt={}: detected_case_vec = {}'.format(process_image.cnt,process_image.detected_case_vec))
+	
 	return result
 
-## Read the video and add the estimated lane lines on it
-output = 'project_video_with_lane_est.mp4'
-clip = VideoFileClip("project_video.mp4")
-out_clip = clip.fl_image(process_image) 
-out_clip.write_videofile(output, audio=False)
 
+	
+####  ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~ Part D: Using the Pipeline on a single image or on a video ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~  ####
+single_img_en = False  # enable single image
+video_en = True        # enable the video
+
+###
+### Single image
+if single_img_en:
+	img_fname = 'video_images/img1051.jpg'   # image name
+	img = cv2.imread(img_fname)           # read the image
+	img = cv2.cvtColor(img,cv2.COLOR_BGR2RGB)
+	process_image(img, single_img=True, fname=img_fname)
+
+	
+###
+### Video: Read the video and add the estimated lane lines on it
+if video_en:
+	output = 'project_video_with_lane_est.mp4'
+	clip = VideoFileClip("project_video.mp4")
+	out_clip = clip.fl_image(process_image) 
+	out_clip.write_videofile(output, audio=False)
