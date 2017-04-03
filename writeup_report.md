@@ -18,12 +18,13 @@ The goals / steps of this project are the following:
 
 [//]: # (Image References)
 
-[image1]: ./output_images/original_vs_calibratted_chessboard.png "calibratted_chess"
-[image2]: ./output_images/original_vs_calibratted_road.png "calibratted_road"
-[image3]: ./output_images/applay_sobel_th.png "Binary_Sobel"
-[image4]: ./output_images/applay_color_th.png "Binary_Color"
-[image5]: ./output_images/binary_final.png "Binary_Final"
-[image6]: ./output_images/birdeye_on_straight_lines.png "birdeye_sl"
+[image1]: ./output_images/original_vs_calibratted_chessboard_0.png "calibratted_chess"
+[image2]: ./output_images/original_vs_calibratted_chessboard_rnd.png "calibratted_chess"
+[image3]: ./output_images/original_vs_calibratted_road.png "calibratted_road"
+[image4]: ./output_images/applay_sobel_th.png "Binary_Sobel"
+[image5]: ./output_images/applay_color_th.png "Binary_Color"
+[image6]: ./output_images/binary_final.png "Binary_Final"
+[image7]: ./output_images/birdeye_on_straight_lines.png "birdeye_sl"
 [image8]: ./output_images/fit_polynomial_startover.png "polyfit"
 [image9]: ./output_images/final_est_lane.png "final_est"
 [video1]: ./project_video_with_lane_est.mp4 "Video"
@@ -34,7 +35,7 @@ The goals / steps of this project are the following:
 ---
 ###Writeup / README
 
-####1. Provide a Writeup / README that includes all the rubric points and how you addressed each one. [Here](https://github.com/udacity/CarND-Advanced-Lane-Lines/blob/master/writeup_template.md) is my project repository.  
+####1. Provide a Writeup / README that includes all the rubric points and how you addressed each one. [Here](https://github.com/shayko18/CarND-Advanced-Lane-Lines) is my project repository.  
 
 You're reading it!
 ###Camera Calibration
@@ -43,21 +44,26 @@ You're reading it!
 
 The code for this step is contained in the function "find_calibration_params" (Lines 78-112).  
 
-I start by preparing "object points", which will be the (x, y, z) coordinates of the chessboard corners in the world. Here I am assuming the chessboard is fixed on the (x, y) plane at z=0, such that the object points are the same for each calibration image.  Thus, `objp` is just a replicated array of coordinates, and `obj_points` will be appended with a copy of it every time I successfully detect all chessboard corners in a test image.  `img_points` will be appended with the (x, y) pixel position of each of the corners in the image plane with each successful chessboard detection. Most of the chessboard images were 9x6, but some were is different size so I scaned a little bit around 9x6 in order to find and use all the 20 chessboard images that were given. 
+I staredt by preparing "object points", which will be the (x, y, z) coordinates of the chessboard corners in the world. Here I am assuming the chessboard is fixed on the (x, y) plane at z=0, such that the object points are the same for each calibration image.  Thus, `objp` is just a replicated array of coordinates, and `obj_points` will be appended with a copy of it every time I successfully detect all chessboard corners in a test image.  `img_points` will be appended with the (x, y) pixel position of each of the corners in the image plane with each successful chessboard detection. 
+Most of the chessboard images were 9x6, but some were is different size so I scaned a little bit around 9x6 in order to find and use all the 20 chessboard images that were given. 
 
 I then used the output `obj_points` and `img_points` to compute the camera calibration and distortion coefficients using the `cv2.calibrateCamera()` function.  I applied this distortion correction to the test image using the `cv2.undistort()` function and obtained this result: 
-
+On the first chessboard image:
 ![alt text][image1]
+
+On a randon chessboard image:
+![alt text][image2]
 
 ###Pipeline (single images)
 
-There is a main process_image() function (lines 676-751) that we use both for the single images and for the video.
+There is a main process_image() function (lines 676-751) that we used both for the single images and for the video.
 Before we run this function we calibrate the camera and we find the birdeye transform matrix.
 
 
 ####1. Provide an example of a distortion-corrected image.
+To correct the distortion we use the function "calibrate_road_image" that simply use cv2.undistort() wwith the parameters we found before.
 To demonstrate this step, I will describe how I apply the distortion correction to one of the test images like this one:
-![alt text][image2]
+![alt text][image3]
 
 ####2. Describe how (and identify where in your code) you used color transforms, gradients or other methods to create a thresholded binary image.  Provide an example of a binary image result.
 I used a combination of color and gradient thresholds to generate a binary image. 
@@ -74,10 +80,10 @@ Each one has its own threshold and we combine them in the following way:
 final_output_soble = (B[abs_sobel_x] & B[abs_sobel_y]) | (B[mag_sobel] & B[angle_soble])
 
 B[*] is the binary threshold.
-After some tries I set the thresholds so I'll only use abs_sobel_x with thresholds of [30,200]. (B[abs_sobel_y] was set to all ones, and the others to all zeros)
+After some tries I set the thresholds so I'll only use abs_sobel_x with thresholds of [30,200]. (B[abs_sobel_y] was set to all ones, and B[mag_sobel], B[angle_soble] to all zeros)
 The Kernel size was set to 3.
 Here is an example:
-![alt text][image3]
+![alt text][image4]
 
 **Color thresholds**
 The function "color_binary_th" (Lines 231-278) will use a color channels to create a thresholded binary image. 
@@ -93,7 +99,7 @@ final_output_color = (B[s_channel] | B[r_channel])
 B[*] is the binary threshold
 After some tries I set the thresholds so I'll only use s_channel with thresholds of [175,255]. (B[r_channel] was set to all zeros)
 Here is an example:
-![alt text][image4]
+![alt text][image5]
 
 **apply binary thresholds**
 The function "apply_binary_th" (Lines 291-317) apply the two binary images (from the sobel and from the color space) in the following way:
@@ -101,7 +107,7 @@ final_output = final_output_sobel | final_output_color
 
 Here's an example of my output for this step. 
 
-![alt text][image5]
+![alt text][image6]
 
 ####3. Describe how you performed a perspective transform and provide an example of a transformed image.
 
@@ -128,8 +134,9 @@ This function will return the transform matrix.
 I verified that my perspective transform was working as expected by drawing the `src` and `dst` points onto a test image and its warped counterpart to verify that the lines appear parallel in the warped image. To apply this matrix we simply use "cv2.warpPerspective()" with the matrix we found.
 
 Here is the "straight_lines" images after we calculated the birdeye matrix:
-![alt text][image6]
+![alt text][image7]
 
+For the project we used only the first matrix.
 
 ####4. Describe how you identified lane-line pixels and fit their positions with a polynomial?
 
@@ -153,7 +160,7 @@ we need to find the fit in the real world (meters). We can simply scale the pixe
     scale_vec = np.float32([xm_per_pix/(ym_per_pix**2), xm_per_pix/ym_per_pix, xm_per_pix])
     left_fit_cr = left_fit*scale_vec
     right_fit_cr = right_fit*scale_vec
-Now we have the fit in the "meters world" and we use the curvature formula to find the curvature for each lane. We will latter can average those to curvature to get one finle curvature estimation.
+Now we have the fit in the "meters world" and we use the curvature formula to find the curvature for each lane. We will latter can average those two curvatures to get one finle curvature estimation.
 
 **Offset**
 we simply find the left and right lane origin in pixels and then, by assuming the camera is in the middle of the car and by using xm_per_pix we can easily find the offset:
@@ -177,13 +184,26 @@ We pipeline each image. The stratover parameter for the poly fit was set to True
 We also avraged the lane fit in the currect frame with the estimation we had so far (IIR filter). the IIR coeff was set differenty in the case that we were able to detect a lane and for the case that we didn't detect a lane. (Lines 718-733) 
 Here's a [link to my video result](./project_video_with_lane_est.mp4)
 
+In the "detected_case_vec" we collect data on the number of frames that were detected successfully (first bin) and for the rest of the frames we see the reason that they were declared to be not good (in fucntion "is_good_lanes"):
+
+- We were not able to fit any line (no points were found)
+- wrong position of left line near the car
+- wrong position of right line near the car
+- wrong position of wrong left curve
+- wrong position of wrong right curve
+
 ---
 
 ###Discussion
 
 ####1. Briefly discuss any problems / issues you faced in your implementation of this project.  Where will your pipeline likely fail?  What could you do to make it more robust?
 
-One problem was that we had to manually configure the threshold for all the binary thresholding we did. There are too many threshold (and combinations of binary images to take) and this is not such a good way to go beacuse we can find ourselves in the different lighting/shadow condition that our thresholds will not be good enough. Using the CNN from the previous project was much more robust...
-We tried to average (using an IIR filter: y[n]=(1-a)y[n-1]+ax[n]) the results we got from each frame in order to filter out or to smooth the fit we got from each frame.
-We took advantage of the fact that we know where the car was driving, so we know what is the expected curvature.
+
+- One problem was that we had to manually configure the threshold for all the binary thresholding we did. There are too many threshold (and combinations of binary images to take) and this is not such a good way to go beacuse we can find ourselves in the different lighting/shadow condition that our thresholds will not be good enough. Using the CNN from the previous project was much more robust...
+
+
+- We tried to average (using an IIR filter: y[n]=(1-a)y[n-1]+ax[n]) the results we got from each frame in order to filter out or to smooth the fit we got from each frame.
+
+
+- We took advantage of the fact that we know where (on which area) the car was driving, so we know what is the expected curvature. In the real world it would be more difficult although we still have the standard (in each country) to relay on. 
   
