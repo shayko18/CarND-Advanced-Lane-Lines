@@ -430,7 +430,7 @@ def calc_curve_offset(img_shape, left_fit, right_fit, M_inv=None, plot_en=False)
 
 	
 	# We now find the offset. 
-	offset = ((left_lane_org_x+right_lane_org_x)/2.0 - img_shape[0]/2.0)
+	offset = ((left_lane_org_x+right_lane_org_x)/2.0 - img_shape[0]/2.0) # assume the camera in in the middle of the car
 	offset *= (100.0*xm_per_pix) # switching from pixels to cm
 	return left_curverad, right_curverad, offset # switching from meters to km for the curve
 	
@@ -486,7 +486,7 @@ def fit_lane_line(bird_b_undist_img, startover=True, left_fit_prev=None, right_f
 	nonzeroy = np.array(nonzero[0])
 	nonzerox = np.array(nonzero[1])
 	out_img = np.dstack((bird_b_undist_img, bird_b_undist_img, bird_b_undist_img))*255 # Create an output image to draw on and visualize the result
-	margin = 100                          # Set the width of the windows/poly +/- margin
+	margin = 150                          # Set the width of the windows/poly +/- margin
 
 	if startover:
 		#print('\t--> Start over')
@@ -721,7 +721,7 @@ def process_image(img, single_img=False, fname=''):
 		process_image.first_frame = single_img
 		if detected:
 			process_image.n_bad_frames = 1000
-	else:	
+	else:
 		if detected:     # the current estimation looks good, we weight it with the previous estimation (IIR)
 			a = a_good
 			process_image.n_bad_frames = 0
@@ -736,7 +736,7 @@ def process_image(img, single_img=False, fname=''):
     #          We draw the estimated lane lines, curvature and the offset on the original image) plot the result + calculate the curve and the offset
 	result = draw_lane_lines(rgb_undist_img, process_image.left_fit, process_image.right_fit, M_inv=M_inv, plot_en=single_img)    # draw the estimated lane lines, the curvature and the offset
 	
-	if (True and single_img==False): # for debug
+	if (False and single_img==False): # for debug
 		cv2.imwrite("video_images/img" + str(process_image.cnt) + ".jpg", cv2.cvtColor(img, cv2.COLOR_RGB2BGR))	
 		cv2.imwrite("video_images/" +str(detected) + "_res" + str(process_image.cnt) + ".jpg", cv2.cvtColor(result, cv2.COLOR_RGB2BGR))		
 	
@@ -759,7 +759,8 @@ video_en = True        # enable the video
 ###
 ### Single image
 if single_img_en:
-	img_fname = 'video_images/img1051.jpg'   # image name
+	#img_fname = 'video_images/img1038.jpg'   # image name
+	img_fname = 'test_images/test1.jpg'   # image name
 	img = cv2.imread(img_fname)           # read the image
 	img = cv2.cvtColor(img,cv2.COLOR_BGR2RGB)
 	process_image(img, single_img=True, fname=img_fname)
