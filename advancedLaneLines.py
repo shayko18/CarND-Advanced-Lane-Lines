@@ -108,7 +108,6 @@ def find_calibration_params(nx, ny, dn, plot_en=False):
 		dst = cv2.undistort(img, mtx, dist, None, mtx)             # undistorted image
 
 		plot_dist_vs_undist(img, dst, corners=img_points[idx], title=imgs_fnames[idx])
-	
 	return ret, mtx, dist, rvecs, tvecs
 
 
@@ -446,7 +445,7 @@ def calc_curve_offset(img_shape, left_fit, right_fit, M_inv=None, plot_en=False)
 ###       detected_case: what was the reason for not enabling to detected a good line
 def is_good_lanes(img_shape, left_fit, right_fit):
 	if left_fit is None:
-		return False, 1
+		return False, 1 # We were not able to fit any line (no points were found)
 	
 	y_eval = img_shape[1]-1                                                         # y value (nearest to the car) we will calculate the curvature and offset 
 	left_lane_org_x = left_fit[0]*y_eval**2 + left_fit[1]*y_eval + left_fit[2]      # x value (in pixels) of the left lane at y_eval
