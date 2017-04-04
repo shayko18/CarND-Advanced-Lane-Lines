@@ -758,7 +758,7 @@ video_en = True        # enable the video
 ###
 ### Single image
 if single_img_en:
-	#img_fname = 'video_images/img1038.jpg'   # image name
+	#img_fname = 'video_images/img1038.jpg'   # image name form debug folder
 	img_fname = 'test_images/test1.jpg'   # image name
 	img = cv2.imread(img_fname)           # read the image
 	img = cv2.cvtColor(img,cv2.COLOR_BGR2RGB)
